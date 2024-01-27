@@ -21,19 +21,24 @@ export default async function handler(
 
       let validatedMessage: Message | undefined = undefined;
       let fid = 0;
+      let castId: any = {};
       try {
         const frameMessage = Message.decode(
           Buffer.from(req.body?.trustedData?.messageBytes || "", "hex")
         );
+
         console.log(Message.toJSON(frameMessage));
         const result = await client.validateMessage(frameMessage);
         if (result.isOk() && result.value.valid) {
           validatedMessage = result.value.message;
         }
         fid = frameMessage.data?.fid || 0;
+        castId = frameMessage.data?.frameActionBody?.castId;
       } catch (e) {
         return res.status(400).send(`Failed to validate message: ${e}`);
       }
+
+      console.log({ fid, castId });
 
       // const fid = validatedMessage?.data?.fid || 0;
 
@@ -50,16 +55,18 @@ export default async function handler(
         authorFid: message?.authorFid,
       });
 
-      const [follow, followBack] = await Promise.all([
+      // http://127.0.0.1:2281/v1/reactionById?fid=2&reaction_type=1&target_fid=1795&target_hash=0x7363f449bfb0e7f01c5a1cc0054768ed5146abc0
+      // fid = The FID of the reaction's creator
+
+      const [like, recast] = await Promise.all([
         fetch(
-          `${HUB_URL}/v1/linkById?fid=${message?.authorFid}&target_fid=${fid}&link_type=follow`
+          `${HUB_URL}/v1/reactionById?fid=${fid}&reaction_type=REACTION_TYPE_LIKE&target_fid=${message?.authorFid}&target_hash=${castId?.hash}`
         ),
         fetch(
-          `${HUB_URL}/v1/linkById?fid=${fid}&target_fid=${message?.authorFid}&link_type=follow`
+          `${HUB_URL}/v1/reactionById?fid=${fid}&reaction_type=REACTION_TYPE_RECAST&target_fid=${message?.authorFid}&target_hash=${castId?.hash}`
         ),
       ]);
-      const mutuals =
-        (follow.ok && followBack.ok) || message?.authorFid === fid;
+      const pass = (like.ok && recast.ok) || message?.authorFid === fid;
 
       const messageHash = crypto
         .createHash("sha256")
@@ -71,7 +78,7 @@ export default async function handler(
       }
       const imageUrl = `${process.env["NEXT_PUBLIC_URL"]}/api/image?id=${
         message.id
-      }&${mutuals ? "preimage=" + messageHash : "failed=true"}`;
+      }&${pass ? "preimage=" + messageHash : "failed=true"}`;
 
       console.log(imageUrl);
 
@@ -88,9 +95,9 @@ export default async function handler(
           <meta name="fc:frame:image" content="${imageUrl}">
           <meta name="fc:frame:post_url" content="${
             process.env["NEXT_PUBLIC_URL"]
-          }/api/vote?id=${message.id}&voted=true&preimage=${messageHash}">
+          }/api/fetch?id=${message.id}&preimage=${messageHash}">
           <meta name="fc:frame:button:1" content="${
-            mutuals ? "Success" : "Failed"
+            pass ? "Success" : "Failed (try again in a few seconds)"
           }">
         </head>
         <body></body>

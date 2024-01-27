@@ -65,7 +65,7 @@ export default async function handler(
             </div>
           ) : (
             <p style={{ textAlign: "center", color: "lightgray" }}>
-              Mutuals of @{username} can view this secret message
+              Like and recast this message to reveal its contents
             </p>
           )}
         </div>
