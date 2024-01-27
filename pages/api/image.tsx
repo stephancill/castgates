@@ -32,6 +32,7 @@ export default async function handler(
     const username = userDataRaw?.data?.userDataBody.value;
 
     const preimage = req.query["preimage"];
+    const pass = preimage === message?.contentHash;
 
     const svg = await satori(
       <div
@@ -54,7 +55,7 @@ export default async function handler(
             padding: 20,
           }}
         >
-          {preimage ? (
+          {pass ? (
             <div style={{ display: "flex", flexDirection: "column" }}>
               <h2 style={{ textAlign: "center", color: "lightgray" }}>
                 {message?.content}
@@ -85,7 +86,21 @@ export default async function handler(
     );
 
     // Convert SVG to PNG using Sharp
-    const pngBuffer = await sharp(Buffer.from(svg)).toFormat("png").toBuffer();
+    let pngBuffer = await sharp(Buffer.from(svg)).toFormat("png").toBuffer();
+
+    // If content is a url, fetch it and overlay it on the image
+    if (
+      pass &&
+      message?.content.startsWith("http") &&
+      (message?.content.endsWith(".png") || message?.content.endsWith(".jpg"))
+    ) {
+      pngBuffer = await sharp(
+        await (await fetch(message?.content)).arrayBuffer()
+      )
+        .resize(600, 400)
+        .toFormat("png")
+        .toBuffer();
+    }
 
     // Set the content type to PNG and send the response
     res.setHeader("Content-Type", "image/png");

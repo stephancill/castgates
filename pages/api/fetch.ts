@@ -57,16 +57,27 @@ export default async function handler(
 
       // http://127.0.0.1:2281/v1/reactionById?fid=2&reaction_type=1&target_fid=1795&target_hash=0x7363f449bfb0e7f01c5a1cc0054768ed5146abc0
       // fid = The FID of the reaction's creator
-
+      //214318
       const [like, recast] = await Promise.all([
         fetch(
-          `${HUB_URL}/v1/reactionById?fid=${fid}&reaction_type=REACTION_TYPE_LIKE&target_fid=${message?.authorFid}&target_hash=${castId?.hash}`
+          `${HUB_URL}/v1/reactionById?fid=${fid}&reaction_type=1&target_fid=${
+            castId?.fid
+          }&target_hash=0x${castId?.hash.toString("hex")}`
         ),
         fetch(
-          `${HUB_URL}/v1/reactionById?fid=${fid}&reaction_type=REACTION_TYPE_RECAST&target_fid=${message?.authorFid}&target_hash=${castId?.hash}`
+          `${HUB_URL}/v1/reactionById?fid=${fid}&reaction_type=2&target_fid=${
+            castId?.fid
+          }&target_hash=0x${castId?.hash.toString("hex")}`
         ),
       ]);
-      const pass = (like.ok && recast.ok) || message?.authorFid === fid;
+      // TODO: check message author is same as cast authpr
+      const pass = (like.ok && recast.ok) || false; // message?.authorFid === fid;
+
+      console.log({
+        like: await like.json(),
+        recast: await recast.json(),
+        pass,
+      });
 
       const messageHash = crypto
         .createHash("sha256")
