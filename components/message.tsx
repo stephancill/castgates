@@ -6,10 +6,6 @@ import { useEffect } from "react";
 export function Message() {
   const session = useSession();
 
-  useEffect(() => {
-    console.log(session);
-  }, [session]);
-
   return (
     <div>
       {session.data?.user ? (

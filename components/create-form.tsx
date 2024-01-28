@@ -48,10 +48,6 @@ export function CreateForm() {
     });
   };
 
-  useEffect(() => {
-    console.log(selectedGates);
-  }, [selectedGates]);
-
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     const res = await fetch("/api/create", {

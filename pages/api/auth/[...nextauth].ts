@@ -60,15 +60,12 @@ export const authOptions: NextAuthOptions = {
           image: credentials?.pfp,
         };
 
-        console.log("logged in", user);
-
         return user;
       },
     }),
   ],
   callbacks: {
     async session({ session, token }) {
-      console.log({ session, token });
       // Called whenever a session is created
       // `token` is the token returned from the `jwt` callback
       // This is where you should add any custom session data

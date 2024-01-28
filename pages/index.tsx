@@ -28,7 +28,6 @@ export default function Home() {
 
   const handleSuccess = useCallback(
     (res: StatusAPIResponse) => {
-      console.log("signed in", res);
       signIn("credentials", {
         message: res.message,
         signature: res.signature,
@@ -39,10 +38,6 @@ export default function Home() {
     },
     [signIn]
   );
-
-  useEffect(() => {
-    console.log("session changed", session);
-  }, [session]);
 
   return (
     <main style={{ fontFamily: "Inter, sans-serif" }}>
