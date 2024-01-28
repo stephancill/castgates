@@ -3,13 +3,17 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "../../lib/prisma";
 import crypto from "crypto";
 import { authOptions } from "./auth/[...nextauth]";
+import { generateMessage } from "../../lib/util";
+import { GateType } from "@prisma/client";
 
 async function createMessage({
   authorFid,
   content,
+  gates,
 }: {
   authorFid: number;
   content: string;
+  gates: GateType[];
 }) {
   const contentHash = crypto
     .createHash("sha256")
@@ -21,6 +25,7 @@ async function createMessage({
       authorFid,
       content,
       contentHash,
+      gateType: gates,
     },
   });
 
@@ -41,10 +46,10 @@ export default async function handler(
   }
 
   if (req.method === "POST") {
-    const { content } = JSON.parse(req.body);
+    const { content, gates } = JSON.parse(req.body);
     const { id: fid } = session?.user;
 
-    console.log({ content, fid });
+    console.log({ content, fid, gates });
 
     if (!content || !fid) {
       return res.send({
@@ -57,10 +62,12 @@ export default async function handler(
     const message = await createMessage({
       authorFid: parseInt(fid),
       content,
+      gates,
     });
 
     res.send({
       message,
+      text: generateMessage(gates, session.user.name!),
     });
   }
 }

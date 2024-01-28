@@ -10,6 +10,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum GateType {
+  IS_FOLLOWING
+  FOLLOWED_BY
+  LIKE
+  RECAST
+}
+
 model Messages {
   id   String @id @default(uuid())
   createdAt DateTime @default(now())
@@ -17,4 +24,5 @@ model Messages {
   content   String
   contentHash String
   authorFid    Int
+  gateType GateType[] @default([])
 }

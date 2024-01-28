@@ -1,12 +1,11 @@
 import "@farcaster/auth-kit/styles.css";
 
-import Head from "next/head";
-import { useSession, signIn, signOut, getCsrfToken } from "next-auth/react";
 import {
-  SignInButton,
   AuthKitProvider,
+  SignInButton,
   StatusAPIResponse,
 } from "@farcaster/auth-kit";
+import { getCsrfToken, signIn, signOut, useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 import { CreateForm } from "../components/create-form";
 
@@ -58,7 +57,15 @@ export default function Home() {
             />
             {error && <div>Unable to sign in at this time.</div>}
           </div>
-          <div style={{ paddingTop: "33vh", textAlign: "center" }}>
+          <div
+            style={{
+              paddingTop: "33vh",
+              textAlign: "center",
+              display: "flex",
+              justifyContent: "center",
+              width: "100%",
+            }}
+          >
             {session ? (
               <div style={{ fontFamily: "sans-serif" }}>
                 <p>Signed in as {session.user?.name}</p>

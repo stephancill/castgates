@@ -1,18 +1,38 @@
+import { Message, getSSLHubRpcClient } from "@farcaster/hub-nodejs";
+import { GateType } from "@prisma/client";
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getSSLHubRpcClient, Message } from "@farcaster/hub-nodejs";
 import { prisma } from "../../lib/prisma";
-import crypto from "crypto";
+import { getHash } from "../../lib/util";
 
-const HUB_URL = process.env["HUB_URL"] || "nemes.farcaster.xyz:2283";
+const HUB_URL = "nemes.farcaster.xyz:2283";
+const HUB_HTTP_URL = process.env.HUB_URL;
 const client = getSSLHubRpcClient(HUB_URL);
+
+type GateReqArgs = { castFid: number; requesterFid: number; castHash: string };
+const gates: Record<string, (args: GateReqArgs) => Promise<boolean>> = {
+  [GateType.LIKE]: ({ castFid, requesterFid, castHash }: GateReqArgs) =>
+    fetch(
+      `${HUB_HTTP_URL}/v1/reactionById?fid=${requesterFid}&reaction_type=1&target_fid=${castFid}&target_hash=0x${castHash}`
+    ).then((res) => res.ok),
+  [GateType.RECAST]: ({ castFid, requesterFid, castHash }: GateReqArgs) =>
+    fetch(
+      `${HUB_HTTP_URL}/v1/reactionById?fid=${requesterFid}&reaction_type=2&target_fid=${castFid}&target_hash=0x${castHash}`
+    ).then((res) => res.ok),
+  [GateType.FOLLOWED_BY]: ({ castFid, requesterFid }: GateReqArgs) =>
+    fetch(
+      `${HUB_HTTP_URL}/v1/linkById?fid=${castFid}&target_fid=${requesterFid}&link_type=follow`
+    ).then((res) => res.ok || requesterFid === castFid),
+  [GateType.IS_FOLLOWING]: ({ castFid, requesterFid }: GateReqArgs) =>
+    fetch(
+      `${HUB_HTTP_URL}/v1/linkById?fid=${requesterFid}&target_fid=${castFid}&link_type=follow`
+    ).then((res) => res.ok || requesterFid === castFid),
+};
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   if (req.method === "POST") {
-    // Process the vote
-    // For example, let's assume you receive an option in the body
     try {
       const messageId = req.query["id"];
       if (!messageId) {
@@ -20,29 +40,35 @@ export default async function handler(
       }
 
       let validatedMessage: Message | undefined = undefined;
-      let fid = 0;
-      let castId: any = {};
       try {
-        const frameMessage = Message.decode(
-          Buffer.from(req.body?.trustedData?.messageBytes || "", "hex")
-        );
-
-        console.log(JSON.stringify(Message.toJSON(frameMessage)));
+        const {
+          trustedData: { messageBytes },
+        } = req.body;
+        const frameMessage = Message.decode(Buffer.from(messageBytes, "hex"));
         const result = await client.validateMessage(frameMessage);
         if (result.isOk() && result.value.valid) {
           validatedMessage = result.value.message;
+        } else {
+          console.error(`Failed to validate message: ${result}`);
+          return res.status(400).send(`Failed to validate message: ${result}`);
         }
-        fid = frameMessage.data?.fid || 0;
-        castId = frameMessage.data?.frameActionBody?.castId;
       } catch (e) {
+        console.error(`Failed to validate message: ${e}`);
         return res.status(400).send(`Failed to validate message: ${e}`);
       }
 
-      console.log({ fid, castId });
+      const requesterFid = validatedMessage?.data?.fid || 0;
+      const castId = validatedMessage?.data?.frameActionBody?.castId;
 
-      // const fid = validatedMessage?.data?.fid || 0;
+      if (!castId) {
+        return res.status(400).send("Missing cast ID");
+      }
 
-      // https://acf4c9.hubs.neynar.com:2281/v1/linkById?fid=6833&target_fid=2&link_type=follow
+      if (!requesterFid) {
+        return res.status(400).send("Missing fid");
+      }
+
+      const castHash = Buffer.from(castId.hash).toString("hex");
 
       const message = await prisma.messages.findUnique({
         where: {
@@ -50,43 +76,33 @@ export default async function handler(
         },
       });
 
-      console.log({
-        fid: validatedMessage?.data?.fid,
-        authorFid: message?.authorFid,
-      });
-
-      // http://127.0.0.1:2281/v1/reactionById?fid=2&reaction_type=1&target_fid=1795&target_hash=0x7363f449bfb0e7f01c5a1cc0054768ed5146abc0
-      // fid = The FID of the reaction's creator
-      //214318
-      const [like, recast] = await Promise.all([
-        fetch(
-          `${HUB_URL}/v1/reactionById?fid=${fid}&reaction_type=1&target_fid=${
-            castId?.fid
-          }&target_hash=0x${castId?.hash.toString("hex")}`
-        ),
-        fetch(
-          `${HUB_URL}/v1/reactionById?fid=${fid}&reaction_type=2&target_fid=${
-            castId?.fid
-          }&target_hash=0x${castId?.hash.toString("hex")}`
-        ),
-      ]);
-      // TODO: check message author is same as cast authpr
-      const pass = (like.ok && recast.ok) || false; // message?.authorFid === fid;
-
-      console.log({
-        like: await like.json(),
-        recast: await recast.json(),
-        pass,
-      });
-
-      const messageHash = crypto
-        .createHash("sha256")
-        .update((message?.content || "") + process.env["SALT_VALUE"])
-        .digest("hex");
-
       if (!message) {
-        return res.status(400).send("Missing poll ID");
+        return res.status(404).send("Message not found");
       }
+
+      console.log({
+        requesterFid,
+        authorFid: castId.fid,
+      });
+
+      const gateResults = await Promise.all(
+        message.gateType.map((gate) =>
+          gates[gate]({
+            castFid: castId.fid,
+            castHash,
+            requesterFid,
+          })
+        )
+      );
+
+      console.log({ gateResults });
+
+      const pass =
+        gateResults.every((result) => result) &&
+        message.authorFid === castId.fid;
+
+      const messageHash = getHash(message.content);
+
       const imageUrl = `${process.env["NEXT_PUBLIC_URL"]}/api/image?id=${
         message.id
       }&${pass ? "preimage=" + messageHash : "failed=true"}`;
@@ -108,7 +124,7 @@ export default async function handler(
             process.env["NEXT_PUBLIC_URL"]
           }/api/fetch?id=${message.id}&preimage=${messageHash}">
           <meta name="fc:frame:button:1" content="${
-            pass ? "Success" : "Failed (try again in a few seconds)"
+            pass ? "Success" : "Failed (try again)"
           }">
         </head>
         <body></body>

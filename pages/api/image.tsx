@@ -1,10 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import sharp from "sharp";
-// import {kv} from "@vercel/kv";
-import satori from "satori";
-import { join } from "path";
 import * as fs from "fs";
+import { join } from "path";
+import satori from "satori";
 import { prisma } from "../../lib/prisma";
+import { generateMessage } from "../../lib/util";
 
 const fontPath = join(process.cwd(), "Roboto-Regular.ttf");
 let fontData = fs.readFileSync(fontPath);
@@ -25,6 +25,10 @@ export default async function handler(
       },
     });
 
+    if (!message) {
+      return res.status(400).send("Missing message ID");
+    }
+
     const userDataRes = await fetch(
       `${process.env.HUB_URL}/v1/userDataByFid?fid=${message?.authorFid}&user_data_type=6`
     );
@@ -33,6 +37,13 @@ export default async function handler(
 
     const preimage = req.query["preimage"];
     const pass = preimage === message?.contentHash;
+
+    // if (message.gateType === GateType.LIKE) {
+    //   imageText = "Like this cast to reveal its contents";
+    // } else {
+    // }
+
+    const imageText = generateMessage(message.gateType, username);
 
     const svg = await satori(
       <div
@@ -66,7 +77,7 @@ export default async function handler(
             </div>
           ) : (
             <p style={{ textAlign: "center", color: "lightgray" }}>
-              Like and recast this message to reveal its contents
+              {imageText}
             </p>
           )}
         </div>
