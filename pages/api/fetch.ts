@@ -27,7 +27,7 @@ export default async function handler(
           Buffer.from(req.body?.trustedData?.messageBytes || "", "hex")
         );
 
-        console.log(Message.toJSON(frameMessage));
+        console.log(JSON.stringify(Message.toJSON(frameMessage)));
         const result = await client.validateMessage(frameMessage);
         if (result.isOk() && result.value.valid) {
           validatedMessage = result.value.message;
@@ -51,7 +51,7 @@ export default async function handler(
       });
 
       console.log({
-        fid: fid,
+        fid: validatedMessage?.data?.fid,
         authorFid: message?.authorFid,
       });
 
