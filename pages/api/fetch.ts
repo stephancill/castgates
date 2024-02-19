@@ -88,7 +88,7 @@ export default async function handler(
       const gateResults = await Promise.all(
         message.gateType.map((gate) =>
           gates[gate]({
-            castFid: castId.fid,
+            castFid: message.authorFid,
             castHash,
             requesterFid,
           })
